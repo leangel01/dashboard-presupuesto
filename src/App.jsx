@@ -58,8 +58,8 @@ const App = () => {
   }, []);
 
   // Cálculos de métricas globales
-  const totalApproved = data.reduce((acc, curr) => acc + (Number(curr[" MONTO_APROBADO"]) || 0), 0);
-  const totalPaid = data.reduce((acc, curr) => acc + (Number(curr[" MONTO_PAGADO"]) || 0), 0);
+  const totalApproved = data.reduce((acc, curr) => acc + (Number(curr["MONTO_APROBADO"]) || 0), 0);
+  const totalPaid = data.reduce((acc, curr) => acc + (Number(curr["MONTO_PAGADO"]) || 0), 0);
   const executionRate = totalApproved > 0 ? ((totalPaid / totalApproved) * 100).toFixed(2) : 0;
 
   // Procesamiento de datos para los gráficos (Top 5 Ramos por monto aprobado)
@@ -67,13 +67,13 @@ const App = () => {
     const ramo = curr.DESC_RAMO || "Otros";
     const existing = acc.find(item => item.name === ramo);
     if (existing) {
-      existing.aprobado += (Number(curr[" MONTO_APROBADO"]) || 0);
-      existing.pagado += (Number(curr[" MONTO_PAGADO"]) || 0);
+      existing.aprobado += (Number(curr["MONTO_APROBADO"]) || 0);
+      existing.pagado += (Number(curr["MONTO_PAGADO"]) || 0);
     } else {
       acc.push({ 
         name: ramo, 
-        aprobado: (Number(curr[" MONTO_APROBADO"]) || 0), 
-        pagado: (Number(curr[" MONTO_PAGADO"]) || 0) 
+        aprobado: (Number(curr["MONTO_APROBADO"]) || 0), 
+        pagado: (Number(curr["MONTO_PAGADO"]) || 0) 
       });
     }
     return acc;
@@ -224,10 +224,10 @@ const App = () => {
                         <div className="text-[10px] text-slate-400">UR: {item.DESC_UR}</div>
                       </td>
                       <td className="p-4 text-sm text-right font-mono">
-                        ${(Number(item[" MONTO_APROBADO"]) || 0).toLocaleString()}
+                        ${(Number(item["MONTO_APROBADO"]) || 0).toLocaleString()}
                       </td>
                       <td className="p-4 text-sm text-right font-mono font-bold text-emerald-600">
-                        ${(Number(item[" MONTO_PAGADO"]) || 0).toLocaleString()}
+                        ${(Number(item["MONTO_PAGADO"]) || 0).toLocaleString()}
                       </td>
                     </tr>
                   ))}
