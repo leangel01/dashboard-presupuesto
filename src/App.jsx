@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, onSnapshot, query, getDocs, limit } from 'firebase/firestore';
+import { getFirestore, collection, onSnapshot, query } from 'firebase/firestore';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, 
   PieChart, Pie, Cell 
 } from 'recharts';
-import { Landmark, TrendingUp, AlertCircle, LayoutDashboard, Table as TableIcon, Wallet, Database, Search, Info } from 'lucide-react';
+import { Landmark, TrendingUp, AlertCircle, LayoutDashboard, Table as TableIcon, Wallet, Search, Info, Settings, Database, RefreshCcw } from 'lucide-react';
 
 const getEnv = (key) => {
   try {
@@ -39,178 +39,159 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [view, setView] = useState('dashboard');
-  const [debugInfo, setDebugInfo] = useState("");
+  const [debugInfo, setDebugInfo] = useState({
+    projectId: firebaseConfig.projectId,
+    collection: "presupuesto_2025",
+    status: "Iniciando..."
+  });
 
   useEffect(() => {
-    if (!firebaseConfig.apiKey) {
-      setError("Faltan los Secrets de GitHub (API Key).");
+    if (!firebaseConfig.apiKey || !db) {
+      setError("Configuración de Firebase incompleta. Verifica tus Secrets en GitHub.");
       setLoading(false);
       return;
     }
 
-    if (!db) {
-      setError("Error en la conexión con la base de datos.");
-      setLoading(false);
-      return;
-    }
-
-    // Nombre de la colección - Asegúrate que sea idéntico en la Consola
-    const collectionName = "presupuesto_2025";
+    const collectionName = "presupuesto_2025"; 
     const colRef = collection(db, collectionName);
-    const q = query(colRef);
-
-    console.log(`🔍 Iniciando escucha en la colección: "${collectionName}"...`);
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    
+    // Listener en tiempo real
+    const unsubscribe = onSnapshot(query(colRef), (snapshot) => {
       if (snapshot.empty) {
-        console.warn(`⚠️ La colección "${collectionName}" está vacía.`);
-        setDebugInfo(`Consultando proyecto: ${firebaseConfig.projectId}. Colección: ${collectionName}`);
+        setDebugInfo(prev => ({ ...prev, status: "Conectado pero colección vacía" }));
         setData([]);
         setLoading(false);
         return;
       }
 
       const items = snapshot.docs.map(doc => {
-        const rawData = doc.data();
-        
-        // Buscador de campos flexible (Ignora espacios y mayúsculas)
-        const findValue = (target) => {
-          const key = Object.keys(rawData).find(k => k.trim().toUpperCase() === target.toUpperCase());
-          return key ? rawData[key] : null;
+        const raw = doc.data();
+        const findField = (target) => {
+          const key = Object.keys(raw).find(k => k.trim().toUpperCase() === target.toUpperCase());
+          return key ? raw[key] : null;
         };
 
         return {
           id: doc.id,
-          DESC_RAMO: findValue('DESC_RAMO') || "Sin Nombre",
-          aprobado: Number(findValue('MONTO_APROBADO')) || 0,
-          pagado: Number(findValue('MONTO_PAGADO')) || 0
+          DESC_RAMO: findField('DESC_RAMO') || "Sin Clasificar",
+          aprobado: Number(findField('MONTO_APROBADO')) || 0,
+          pagado: Number(findField('MONTO_PAGADO')) || 0
         };
       });
 
-      console.log("✅ Datos procesados correctamente:", items.length, "registros.");
+      setDebugInfo(prev => ({ ...prev, status: "Datos cargados correctamente" }));
       setData(items);
       setLoading(false);
     }, (err) => {
-      console.error("❌ Error de Firestore:", err);
-      setError(`Error de Firestore: ${err.message}. Revisa las reglas de seguridad.`);
+      console.error("Firestore Error:", err);
+      setError(`Error de acceso: ${err.message}. Verifica las Reglas de Seguridad en Firebase.`);
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
+  // Cálculos globales
   const totalApproved = data.reduce((acc, curr) => acc + curr.aprobado, 0);
   const totalPaid = data.reduce((acc, curr) => acc + curr.pagado, 0);
-  const executionRate = totalApproved > 0 ? ((totalPaid / totalApproved) * 100).toFixed(2) : 0;
+  const executionRate = totalApproved > 0 ? ((totalPaid / totalApproved) * 100).toFixed(1) : 0;
 
   const chartData = data.reduce((acc, curr) => {
-    const ramo = curr.DESC_RAMO;
-    const existing = acc.find(item => item.name === ramo);
+    const existing = acc.find(item => item.name === curr.DESC_RAMO);
     if (existing) {
       existing.aprobado += curr.aprobado;
       existing.pagado += curr.pagado;
     } else {
-      acc.push({ name: ramo, aprobado: curr.aprobado, pagado: curr.pagado });
+      acc.push({ name: curr.DESC_RAMO, aprobado: curr.aprobado, pagado: curr.pagado });
     }
     return acc;
   }, []).sort((a, b) => b.aprobado - a.aprobado).slice(0, 8);
 
-  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f43f5e', '#14b8a6'];
+  const COLORS = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899', '#f97316'];
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-white">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-slate-200 border-t-blue-600 rounded-full animate-spin mb-4 mx-auto"></div>
-          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Sincronizando Nube...</p>
-        </div>
+  if (loading) return (
+    <div className="flex items-center justify-center h-screen bg-white font-sans">
+      <div className="text-center">
+        <div className="w-10 h-10 border-4 border-slate-100 border-t-blue-600 rounded-full animate-spin mb-4 mx-auto"></div>
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sincronizando Nube...</p>
       </div>
-    );
-  }
+    </div>
+  );
 
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-slate-50 p-6">
-        <div className="max-w-md w-full bg-white p-10 rounded-[2.5rem] shadow-2xl shadow-red-100 border border-red-50 text-center">
-          <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
-            <AlertCircle className="w-10 h-10 text-red-500" />
+  // Pantalla de Diagnóstico si no hay datos
+  if (error || data.length === 0) return (
+    <div className="flex items-center justify-center min-h-screen bg-slate-50 p-6 font-sans">
+      <div className="max-w-2xl w-full bg-white p-12 rounded-[3rem] shadow-2xl shadow-blue-100 border border-blue-50">
+        <div className="flex justify-between items-center mb-10">
+          <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center">
+            <Database className="text-blue-600 w-7 h-7" />
           </div>
-          <h2 className="text-2xl font-black text-slate-900 mb-2">Error Crítico</h2>
-          <p className="text-slate-500 text-sm mb-8 leading-relaxed">{error}</p>
-          <button onClick={() => window.location.reload()} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-black transition-all transform active:scale-95 shadow-lg shadow-slate-200">
-            Reintentar Conexión
-          </button>
+          <span className="text-[10px] font-black bg-amber-100 text-amber-700 px-4 py-1.5 rounded-full uppercase">Diagnóstico Activo</span>
         </div>
-      </div>
-    );
-  }
 
-  if (data.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-slate-50 p-6">
-        <div className="max-w-lg w-full bg-white p-10 rounded-[2.5rem] shadow-2xl shadow-blue-100 border border-blue-50">
-          <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Search className="w-10 h-10 text-blue-500" />
+        <h2 className="text-3xl font-black text-slate-900 mb-2 tracking-tighter">Sin datos en el Proyecto</h2>
+        <p className="text-slate-500 text-sm mb-10 leading-relaxed">
+          Firebase respondió correctamente pero la colección <span className="font-mono font-bold text-blue-600">presupuesto_2025</span> parece no tener documentos en el entorno actual.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-10">
+          <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+            <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Project ID Detectado</p>
+            <p className="text-sm font-bold text-slate-800 break-all">{debugInfo.projectId || "No definido"}</p>
           </div>
-          <h2 className="text-2xl font-black text-slate-900 mb-2 text-center">Colección Vacía</h2>
-          <p className="text-slate-500 text-sm mb-8 text-center leading-relaxed">
-            Firebase devolvió una respuesta exitosa, pero no encontró documentos en <span className="font-mono bg-slate-100 px-2 py-0.5 rounded text-blue-600 font-bold">presupuesto_2025</span>.
-          </p>
-          
-          <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 mb-8">
-            <div className="flex items-start gap-3 mb-4">
-              <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
-              <p className="text-xs font-bold text-slate-600 leading-tight uppercase tracking-tight">Guía de solución rápida:</p>
-            </div>
-            <ul className="space-y-3">
-              <li className="flex gap-3 text-xs text-slate-500 font-medium">
-                <span className="w-5 h-5 bg-white rounded-full flex items-center justify-center text-[10px] font-black border border-slate-200 shrink-0">1</span>
-                Verifica que en Firestore el nombre sea <span className="font-bold text-slate-800">presupuesto_2025</span> (todo en minúsculas).
-              </li>
-              <li className="flex gap-3 text-xs text-slate-500 font-medium">
-                <span className="w-5 h-5 bg-white rounded-full flex items-center justify-center text-[10px] font-black border border-slate-200 shrink-0">2</span>
-                Asegúrate de que el ID del proyecto en tus Secrets sea: <span className="font-bold text-slate-800">{firebaseConfig.projectId}</span>.
-              </li>
-              <li className="flex gap-3 text-xs text-slate-500 font-medium">
-                <span className="w-5 h-5 bg-white rounded-full flex items-center justify-center text-[10px] font-black border border-slate-200 shrink-0">3</span>
-                Revisa que los documentos no estén dentro de una subcolección.
-              </li>
-            </ul>
+          <div className="p-6 bg-slate-50 rounded-3xl border border-slate-100">
+            <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Colección Destino</p>
+            <p className="text-sm font-bold text-slate-800">{debugInfo.collection}</p>
           </div>
-          <p className="text-[10px] text-center text-slate-300 font-bold uppercase tracking-widest">{debugInfo}</p>
         </div>
+
+        <div className="bg-blue-600 p-8 rounded-[2rem] text-white mb-10 shadow-xl shadow-blue-200">
+          <h4 className="font-black text-sm uppercase tracking-widest mb-4 flex items-center gap-2">
+            <Settings size={16} /> Verificación Final
+          </h4>
+          <ul className="space-y-4 text-sm opacity-90 font-medium">
+            <li className="flex gap-3 items-start">
+              <div className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center text-[10px] shrink-0 mt-0.5">1</div>
+              <p>Entra a Firebase Console y confirma que el ID arriba sea el mismo que ves en "Configuración del Proyecto".</p>
+            </li>
+            <li className="flex gap-3 items-start">
+              <div className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center text-[10px] shrink-0 mt-0.5">2</div>
+              <p>Si los IDs coinciden, verifica las **Reglas de Seguridad**. Deben permitir lectura pública (allow read: if true;).</p>
+            </li>
+          </ul>
+        </div>
+
+        <button onClick={() => window.location.reload()} className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3">
+          <RefreshCcw size={16} /> Reintentar Sincronización
+        </button>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-[#FDFDFD] text-slate-900 font-sans">
-      {/* Header Estilo Apple */}
-      <nav className="bg-white/70 backdrop-blur-xl border-b border-slate-100 sticky top-0 z-50">
+    <div className="min-h-screen bg-[#FDFDFD] text-slate-900 font-sans selection:bg-blue-100">
+      <nav className="bg-white/80 backdrop-blur-xl border-b border-slate-100 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-tr from-blue-600 to-indigo-500 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-100">
+            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-xl shadow-blue-100">
               <Landmark className="text-white w-6 h-6" />
             </div>
             <div>
-              <h1 className="font-black text-xl leading-none tracking-tighter">FINANZAS PÚBLICAS</h1>
-              <div className="flex items-center gap-2 mt-1">
-                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                <p className="text-[10px] font-black text-slate-400 tracking-[0.2em] uppercase">Datos en Vivo 2025</p>
-              </div>
+              <h1 className="font-black text-xl leading-none tracking-tighter">FINANZAS 2025</h1>
+              <p className="text-[10px] font-black text-blue-600 tracking-[0.2em] uppercase mt-1">Visor de Ejecución</p>
             </div>
           </div>
           
-          <div className="flex bg-slate-100/50 p-1.5 rounded-2xl border border-slate-200/50">
+          <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200/50">
             <button 
               onClick={() => setView('dashboard')} 
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black transition-all duration-300 ${view === 'dashboard' ? 'bg-white shadow-xl shadow-slate-200/50 text-blue-600 scale-105' : 'text-slate-500 hover:bg-white/50'}`}
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[11px] font-black transition-all ${view === 'dashboard' ? 'bg-white shadow-lg text-blue-600 scale-105' : 'text-slate-500 hover:text-slate-800'}`}
             >
               <LayoutDashboard size={14} /> PANEL
             </button>
             <button 
               onClick={() => setView('table')} 
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black transition-all duration-300 ${view === 'table' ? 'bg-white shadow-xl shadow-slate-200/50 text-blue-600 scale-105' : 'text-slate-500 hover:bg-white/50'}`}
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl text-[11px] font-black transition-all ${view === 'table' ? 'bg-white shadow-lg text-blue-600 scale-105' : 'text-slate-500 hover:text-slate-800'}`}
             >
               <TableIcon size={14} /> LISTADO
             </button>
@@ -219,58 +200,39 @@ const App = () => {
       </nav>
 
       <main className="max-w-7xl mx-auto px-6 py-12">
-        {/* Tarjetas de Métricas Superior */}
+        {/* KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-          {[
-            { label: 'Presupuesto Inicial', value: totalApproved, color: 'text-slate-900', icon: <TrendingUp className="text-blue-600" /> },
-            { label: 'Total Devengado', value: totalPaid, color: 'text-emerald-600', icon: <Wallet className="text-emerald-500" /> },
-            { label: 'Avance Presupuestario', value: `${executionRate}%`, color: 'text-indigo-600', icon: <div className="text-indigo-600 font-black">%</div> }
-          ].map((kpi, i) => (
-            <div key={i} className="group bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-2xl hover:shadow-slate-200/50 transition-all duration-500">
-              <div className="flex justify-between items-start mb-6">
-                <div className="p-4 bg-slate-50 rounded-2xl group-hover:bg-blue-50 transition-colors">{kpi.icon}</div>
-                <span className="text-[10px] font-black px-3 py-1 bg-slate-100 rounded-full text-slate-400">ANUAL</span>
-              </div>
-              <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest mb-2">{kpi.label}</p>
-              <p className={`text-4xl font-black tracking-tighter ${kpi.color}`}>
-                {typeof kpi.value === 'number' ? `$${kpi.value.toLocaleString()}` : kpi.value}
-              </p>
-            </div>
-          ))}
+          <MetricCard label="Presupuesto Inicial" value={totalApproved} icon={<TrendingUp className="text-blue-600" />} />
+          <MetricCard label="Monto Pagado" value={totalPaid} icon={<Wallet className="text-emerald-500" />} color="text-emerald-600" />
+          <MetricCard label="Porcentaje Avance" value={`${executionRate}%`} icon={<div className="font-black text-blue-600 text-xs">%</div>} color="text-blue-700" />
         </div>
 
         {view === 'dashboard' ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-            {/* Gráfico de Barras - Top Ramos */}
+            {/* Gráfico Barras */}
             <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100">
-              <h3 className="text-lg font-black mb-10 flex items-center gap-3">
-                <span className="w-1.5 h-6 bg-blue-600 rounded-full"></span>
-                Top 8 Ramos Presupuestarios
-              </h3>
+              <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-10">Top 8 Ramos por Presupuesto</h3>
               <div className="h-[450px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} layout="vertical" margin={{ left: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                     <XAxis type="number" hide />
                     <YAxis dataKey="name" type="category" width={140} tick={{fontSize: 9, fontWeight: 900, fill: '#94a3b8'}} axisLine={false} tickLine={false} />
-                    <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.15)'}} />
-                    <Bar dataKey="aprobado" fill="#2563eb" radius={[0, 12, 12, 0]} barSize={20} />
+                    <Tooltip cursor={{fill: '#f8fafc'}} contentStyle={{borderRadius: '20px', border: 'none', boxShadow: '0 25px 50px -12px rgb(0 0 0 / 0.1)'}} />
+                    <Bar dataKey="aprobado" fill="#2563eb" radius={[0, 12, 12, 0]} barSize={24} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
 
-            {/* Gráfico de Torta - Distribución */}
-            <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 text-center">
-              <h3 className="text-lg font-black mb-10 flex items-center justify-center gap-3">
-                <span className="w-1.5 h-6 bg-emerald-500 rounded-full"></span>
-                Cuota de Gasto Pagado
-              </h3>
+            {/* Gráfico Torta */}
+            <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100">
+              <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-10 text-center">Distribución de Pagos</h3>
               <div className="h-[450px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={chartData} dataKey="pagado" cx="50%" cy="50%" innerRadius={90} outerRadius={125} paddingAngle={10}>
-                      {chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} className="hover:opacity-80 transition-opacity outline-none" />)}
+                    <Pie data={chartData} dataKey="pagado" cx="50%" cy="50%" innerRadius={90} outerRadius={130} paddingAngle={8}>
+                      {chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="none" />)}
                     </Pie>
                     <Tooltip contentStyle={{borderRadius: '20px', border: 'none'}} />
                     <Legend verticalAlign="bottom" iconType="circle" wrapperStyle={{paddingTop: '30px', fontSize: '10px', fontWeight: 'bold'}} />
@@ -281,37 +243,28 @@ const App = () => {
           </div>
         ) : (
           <div className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden">
-            <div className="p-10 border-b border-slate-50 flex justify-between items-center bg-slate-50/20">
-              <div className="flex items-center gap-3">
-                <TableIcon className="text-blue-600" size={20} />
-                <h3 className="font-black text-slate-900 text-lg tracking-tight">Detalle de Ejecución Fiscal</h3>
-              </div>
-              <span className="bg-slate-900 text-white text-[10px] font-black px-4 py-1.5 rounded-xl tracking-widest">{data.length} ENTIDADES</span>
-            </div>
-            <div className="overflow-x-auto px-6 pb-6">
+            <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] border-b border-slate-100">
-                    <th className="p-8">Ramo Presupuestario</th>
+                  <tr className="text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-50">
+                    <th className="p-8">Entidad / Ramo</th>
                     <th className="p-8 text-right">Aprobado</th>
                     <th className="p-8 text-right">Pagado</th>
-                    <th className="p-8 text-center">Estado de Avance</th>
+                    <th className="p-8 text-center">Ejecución</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
                   {data.map(item => {
                     const perc = item.aprobado > 0 ? ((item.pagado / item.aprobado) * 100).toFixed(1) : 0;
                     return (
-                      <tr key={item.id} className="hover:bg-slate-50/50 transition-all group">
-                        <td className="p-8 text-sm font-black text-slate-700">{item.DESC_RAMO}</td>
-                        <td className="p-8 text-sm text-right font-mono font-bold text-slate-400">${item.aprobado.toLocaleString()}</td>
-                        <td className="p-8 text-sm text-right font-mono font-black text-emerald-600 transition-all group-hover:scale-110 origin-right">${item.pagado.toLocaleString()}</td>
+                      <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
+                        <td className="p-8 text-sm font-bold text-slate-700">{item.DESC_RAMO}</td>
+                        <td className="p-8 text-sm text-right font-mono text-slate-400">${item.aprobado.toLocaleString()}</td>
+                        <td className="p-8 text-sm text-right font-mono font-black text-slate-900">${item.pagado.toLocaleString()}</td>
                         <td className="p-8 text-center">
-                          <div className="flex items-center justify-center gap-3">
-                            <div className="w-24 h-2 bg-slate-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min(perc, 100)}%` }}></div>
-                            </div>
-                            <span className="text-[11px] font-black text-slate-900 w-10">{perc}%</span>
+                          <div className="inline-flex items-center gap-2 bg-blue-50 px-3 py-1.5 rounded-full">
+                            <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-pulse"></div>
+                            <span className="text-[10px] font-black text-blue-600">{perc}%</span>
                           </div>
                         </td>
                       </tr>
@@ -323,16 +276,21 @@ const App = () => {
           </div>
         )}
       </main>
-
-      <footer className="max-w-7xl mx-auto px-6 py-16 border-t border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 opacity-40">
-        <p className="text-[10px] font-black tracking-[0.4em] uppercase">Gobierno Transparente &bull; Visor 2025</p>
-        <div className="flex gap-8">
-          <span className="text-[10px] font-black uppercase tracking-widest">Firestore v11.6</span>
-          <span className="text-[10px] font-black uppercase tracking-widest">React v18.3</span>
-        </div>
-      </footer>
     </div>
   );
 };
+
+const MetricCard = ({ label, value, icon, color = "text-slate-900" }) => (
+  <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100 hover:shadow-xl hover:shadow-slate-100 transition-all">
+    <div className="flex justify-between items-start mb-6">
+      <div className="p-4 bg-slate-50 rounded-2xl">{icon}</div>
+      <div className="w-10 h-1 bg-slate-100 rounded-full"></div>
+    </div>
+    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{label}</p>
+    <p className={`text-3xl font-black tracking-tight ${color}`}>
+      {typeof value === 'number' ? `$${value.toLocaleString()}` : value}
+    </p>
+  </div>
+);
 
 export default App;
