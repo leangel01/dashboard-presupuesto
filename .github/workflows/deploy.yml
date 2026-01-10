@@ -15,15 +15,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          # Eliminamos el cache temporalmente para evitar el error de lockfile no encontrado
 
       - name: Install and Build
         run: |
-          npm ci
+          npm install
           npm run build
         env:
           VITE_FIREBASE_CONFIG: ${{ secrets.FIREBASE_CONFIG }}
-          # Esto evita que advertencias menores detengan el build
           CI: false 
 
       - name: Deploy
