@@ -9,36 +9,36 @@ import {
 import { Landmark, TrendingUp, Wallet, PieChart as PieIcon, ShieldAlert, Key, ArrowUpRight, Activity } from 'lucide-react';
 
 /**
- * Función mejorada para obtener y limpiar el JSON de Firebase.
- * A veces las variables de entorno inyectan saltos de línea o caracteres invisibles.
+ * Función ultra-robusta para detectar la configuración.
  */
 const getFirebaseConfig = () => {
   try {
     let rawConfig = null;
 
-    // 1. Prioridad: Entorno de previsualización de la plataforma
     if (typeof __firebase_config !== 'undefined' && __firebase_config) {
       rawConfig = __firebase_config;
     } 
-    // 2. Respaldo: Entorno de Vite (GitHub Actions)
     else if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_FIREBASE_CONFIG) {
       rawConfig = import.meta.env.VITE_FIREBASE_CONFIG;
     }
 
-    if (!rawConfig) return null;
+    if (!rawConfig) {
+      console.warn("⚠️ No se detectó ninguna fuente de configuración de Firebase.");
+      return null;
+    }
 
-    // Si ya es un objeto, lo devolvemos
     if (typeof rawConfig === 'object') return rawConfig;
 
-    // Si es un string, intentamos parsearlo limpiando posibles errores de formato
     try {
-      return JSON.parse(rawConfig.trim());
+      // Limpiamos posibles caracteres de escape que GitHub Actions a veces inserta
+      const cleanJson = rawConfig.trim().replace(/\\n/g, '').replace(/\\/g, '');
+      return JSON.parse(cleanJson);
     } catch (jsonErr) {
-      console.error("Error crítico de sintaxis en el JSON de Firebase. Revisa el Secret en GitHub.", jsonErr);
+      console.error("❌ Error de parseo JSON. El formato del Secret es incorrecto.");
       return null;
     }
   } catch (error) {
-    console.error("Error general al detectar la configuración:", error);
+    console.error("❌ Error general en la detección:", error);
   }
   return null;
 };
@@ -55,7 +55,7 @@ if (firebaseConfig && firebaseConfig.apiKey) {
     db = getFirestore(app);
     auth = getAuth(app);
   } catch (e) {
-    console.error("Error al inicializar Firebase con la config proveída:", e);
+    console.error("❌ Error al inicializar Firebase:", e);
   }
 }
 
@@ -67,10 +67,11 @@ const App = () => {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
+    // Si no hay configuración después de 3 segundos, mostramos el error UI
     if (!firebaseConfig || !auth) {
       const timer = setTimeout(() => {
         if (!auth) {
-          setError("Configuración JSON inválida o no detectada. Por favor, verifica que el Secret FIREBASE_CONFIG en GitHub sea un JSON válido.");
+          setError("Configuración JSON inválida o no detectada. Asegúrate de haber ejecutado un nuevo despliegue en GitHub tras cambiar el Secret.");
           setLoading(false);
         }
       }, 3000);
@@ -85,7 +86,7 @@ const App = () => {
           await signInAnonymously(auth);
         }
       } catch (err) {
-        setError(`Fallo de autenticación: ${err.message}`);
+        setError(`Error de autenticación: ${err.message}`);
         setLoading(false);
       }
     };
@@ -116,7 +117,7 @@ const App = () => {
         setLoading(false);
       }, 
       (err) => {
-        setError(`Error de base de datos: ${err.message}`);
+        setError(`Error de Firestore: ${err.message}. Verifica las reglas de seguridad.`);
         setLoading(false);
       }
     );
@@ -143,7 +144,7 @@ const App = () => {
   if (loading) return (
     <div className="flex flex-col items-center justify-center h-screen bg-slate-50">
       <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-      <p className="mt-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Sincronizando Analítica...</p>
+      <p className="mt-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] animate-pulse">Sincronizando con Firebase...</p>
     </div>
   );
 
@@ -180,21 +181,17 @@ const App = () => {
             <p className="text-slate-500 max-w-md mx-auto mb-8 font-medium">{error}</p>
             <div className="bg-slate-50 rounded-3xl p-8 border border-slate-100 inline-block text-left">
               <h3 className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <Key size={14} /> Cómo solucionar el JSON
+                <Key size={14} /> Auditoría de Error
               </h3>
               <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-                Asegúrate de que tu Secret en GitHub tenga este formato exacto:
+                Si el Secret ya es correcto, GitHub necesita un nuevo "Trigger" para leerlo:
               </p>
-              <pre className="bg-slate-900 text-slate-300 p-4 rounded-xl text-[10px] font-mono leading-tight">
-                {`{
-  "apiKey": "AIza...",
-  "authDomain": "tu-app.firebaseapp.com",
-  "projectId": "tu-app",
-  "storageBucket": "tu-app.appspot.com",
-  "messagingSenderId": "...",
-  "appId": "..."
-}`}
-              </pre>
+              <ul className="list-disc list-inside text-[10px] font-bold text-slate-500 uppercase space-y-2">
+                <li>Realiza un nuevo Commit en GitHub</li>
+                {/* Se corrigió el uso del carácter > escapándolo correctamente para JSX */}
+                <li>O ve a Actions {"->"} Re-run jobs</li>
+                <li>Verifica que el nombre del Secret sea exactamente FIREBASE_CONFIG</li>
+              </ul>
             </div>
           </div>
         ) : (
@@ -202,12 +199,12 @@ const App = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-10">
               <MetricCard label="Monto Aprobado" value={analytics.totalAprobado} icon={<TrendingUp size={20} />} />
               <MetricCard label="Monto Pagado" value={analytics.totalPagado} icon={<Wallet size={20} />} color="text-emerald-600" />
-              <MetricCard label="Ejecución" value={`${analytics.porcentaje}%`} icon={<Activity size={20} />} color="text-amber-600" isPercent />
+              <MetricCard label="Avance" value={`${analytics.porcentaje}%`} icon={<Activity size={20} />} color="text-amber-600" isPercent />
             </div>
 
             {view === 'dashboard' ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                <ChartBox title="Gasto por Ramo">
+                <ChartBox title="Gasto por Ramo Administrativo">
                   <ResponsiveContainer width="100%" height={380}>
                     <BarChart data={analytics.topRamos} layout="vertical" margin={{ left: 10 }}>
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
@@ -219,7 +216,7 @@ const App = () => {
                   </ResponsiveContainer>
                 </ChartBox>
 
-                <ChartBox title="Cuota de Participación">
+                <ChartBox title="Distribución Presupuestal">
                   <ResponsiveContainer width="100%" height={380}>
                     <PieChart>
                       <Pie data={analytics.topRamos} dataKey="pagado" innerRadius={80} outerRadius={110} paddingAngle={8}>
@@ -236,14 +233,14 @@ const App = () => {
                 <table className="w-full text-left">
                   <thead className="bg-slate-50 border-b border-slate-100">
                     <tr>
-                      <th className="p-8 text-[10px] font-black text-slate-400 uppercase tracking-widest">Ramo / UR</th>
+                      <th className="p-8 text-[10px] font-black text-slate-400 uppercase tracking-widest">Unidad Responsable</th>
                       <th className="p-8 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Aprobado</th>
                       <th className="p-8 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest">Pagado</th>
-                      <th className="p-8 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Avance</th>
+                      <th className="p-8 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">Estatus</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {data.map(item => (
+                    {data.length > 0 ? data.map(item => (
                       <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
                         <td className="p-8">
                           <p className="text-[10px] font-bold text-blue-500 mb-1">{item.ur}</p>
@@ -258,7 +255,11 @@ const App = () => {
                           </div>
                         </td>
                       </tr>
-                    ))}
+                    )) : (
+                      <tr>
+                        <td colSpan="4" className="p-20 text-center text-slate-400 font-bold uppercase tracking-widest opacity-50">No hay datos en la colección presupuesto_2025</td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
