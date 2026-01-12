@@ -184,7 +184,7 @@ const App = () => {
   const dynamicTitle = useMemo(() => {
     if (selectedUR !== 'all') return selectedUR;
     if (selectedRamo !== 'all') return selectedRamo;
-    return "Consolidado Nacional";
+    return "Dirección General de Mejora Continua 2";
   }, [selectedRamo, selectedUR]);
 
   if (loading && !error) return (
