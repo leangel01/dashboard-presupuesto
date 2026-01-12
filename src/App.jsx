@@ -202,8 +202,8 @@ const App = () => {
             <Landmark size={24} />
           </div>
           <div>
-            <h1 className="font-black text-xl uppercase leading-none tracking-tight">Analítica Fiscal</h1>
-            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-[0.2em] mt-1">Presupuesto Público 2025</p>
+            <h1 className="font-black text-xl uppercase leading-none tracking-tight">EJERCICIO DEL GASTO</h1>
+            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-[0.2em] mt-1">Presupuesto público</p>
           </div>
         </div>
         
@@ -236,7 +236,7 @@ const App = () => {
                   </h2>
                   <div className="flex items-center gap-2 text-slate-400">
                     <Activity size={16} />
-                    <span className="text-xs font-bold uppercase tracking-widest">Estado de Ejecución Presupuestal 2025</span>
+                    <span className="text-xs font-bold uppercase tracking-widest">Ejecución Presupuestal 2025</span>
                   </div>
                 </div>
 
